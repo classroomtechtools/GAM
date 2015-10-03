@@ -552,81 +552,86 @@ def buildGAPIObject(api):
     customerId = u'my_customer'
   return service
 
-def buildGAPIServiceObject(api, act_as=None, soft_errors=False):
-  oauth2servicefile = os.path.join(gamUserConfigDir, os.environ.get(u'OAUTHSERVICEFILE', 'oauth2service'))
-  oauth2servicefilejson = u'%s.json' % oauth2servicefile
-  oauth2servicefilep12 = u'%s.p12' % oauth2servicefile
-  try:
-    json_string = open(oauth2servicefilejson).read()
-  except IOError, e:
-    print u'Error: %s' % e
-    print u''
-    print u'Please follow the instructions at:\n\nhttps://github.com/jay0lee/GAM/wiki/CreatingClientSecretsFile#creating-your-own-oauth2servicejson\n\nto setup a Service Account'
-    sys.exit(6)
-  json_data = json.loads(json_string)
-  try:
-    SERVICE_ACCOUNT_EMAIL = json_data[u'web'][u'client_email']
-    SERVICE_ACCOUNT_CLIENT_ID = json_data[u'web'][u'client_id']
-    f = file(oauth2servicefilep12, 'rb')
-    key = f.read()
-    f.close()
-  except KeyError:
-    # new format with config and data in the .json file...
-    SERVICE_ACCOUNT_EMAIL = json_data[u'client_email']
-    SERVICE_ACCOUNT_CLIENT_ID = json_data[u'client_id']
-    key = json_data[u'private_key']
-  scope = getAPIScope(api)
-  if act_as == None:
-    credentials = oauth2client.client.SignedJwtAssertionCredentials(SERVICE_ACCOUNT_EMAIL, key, scope=scope)
-  else:
-    credentials = oauth2client.client.SignedJwtAssertionCredentials(SERVICE_ACCOUNT_EMAIL, key, scope=scope, sub=act_as)
-  credentials.user_agent = u'GAM %s - http://git.io/gam / %s / Python %s.%s.%s %s / %s %s /' % (__version__, __author__,
-                   sys.version_info[0], sys.version_info[1], sys.version_info[2], sys.version_info[3],
-                   platform.platform(), platform.machine())
-  disable_ssl_certificate_validation = False
-  if os.path.isfile(os.path.join(gamUserConfigDir, u'noverifyssl.txt')):
-    disable_ssl_certificate_validation = True
-  http = httplib2.Http(disable_ssl_certificate_validation=disable_ssl_certificate_validation, cache=gamCacheDir)
-  if os.path.isfile(os.path.join(gamUserConfigDir, u'debug.gam')):
-    httplib2.debuglevel = 4
-    extra_args[u'prettyPrint'] = True
-  if os.path.isfile(os.path.join(gamUserConfigDir, u'extra-args.txt')):
-    import ConfigParser
-    config = ConfigParser.ConfigParser()
-    config.optionxform = str
-    config.read(os.path.join(gamUserConfigDir, u'extra-args.txt'))
-    extra_args.update(dict(config.items(u'extra-args')))
-  http = credentials.authorize(http)
-  version = getAPIVer(api)
-  try:
-    return googleapiclient.discovery.build(api, version, http=http)
-  except oauth2client.client.AccessTokenRefreshError, e:
-    if e.message in [u'access_denied', u'unauthorized_client: Unauthorized client or scope in request.']:
-      print u'Error: Access Denied. Please make sure the Client Name:\n\n%s\n\nis authorized for the API Scope(s):\n\n%s\n\nThis can be configured in your Control Panel under:\n\nSecurity -->\nAdvanced Settings -->\nManage third party OAuth Client access' % (SERVICE_ACCOUNT_CLIENT_ID, ','.join(scope))
-      sys.exit(5)
-    else:
-      print u'Error: %s' % e
-      if soft_errors:
-        return False
-      sys.exit(4)
-  except googleapiclient.errors.UnknownApiNameOrVersion:
-    disc_filename = u'%s-%s.json' % (api, version)
-    disc_file = os.path.join(gamSiteConfigDir, disc_filename)
-    pyinstaller_disc_file = None
+class buildGAPIServiceObject(object):
+  def __init__(self, api, act_as=None, soft_errors=False):
+    if not hasattr(self, 'http'):
+      # First time in running that we got here
+      oauth2servicefile = os.path.join(gamUserConfigDir, os.environ.get(u'OAUTHSERVICEFILE', 'oauth2service'))
+      oauth2servicefilejson = u'%s.json' % oauth2servicefile
+      oauth2servicefilep12 = u'%s.p12' % oauth2servicefile
+      try:
+        json_string = open(oauth2servicefilejson).read()
+      except IOError, e:
+        print u'Error: %s' % e
+        print u''
+        print u'Please follow the instructions at:\n\nhttps://github.com/jay0lee/GAM/wiki/CreatingClientSecretsFile#creating-your-own-oauth2servicejson\n\nto setup a Service Account'
+        sys.exit(6)
+      json_data = json.loads(json_string)
+      try:
+        SERVICE_ACCOUNT_EMAIL = json_data[u'web'][u'client_email']
+        SERVICE_ACCOUNT_CLIENT_ID = json_data[u'web'][u'client_id']
+        f = file(oauth2servicefilep12, 'rb')
+        key = f.read()
+        f.close()
+      except KeyError:
+        # new format with config and data in the .json file...
+        SERVICE_ACCOUNT_EMAIL = json_data[u'client_email']
+        SERVICE_ACCOUNT_CLIENT_ID = json_data[u'client_id']
+        key = json_data[u'private_key']
+      scope = getAPIScope(api)
+      if act_as == None:
+        credentials = oauth2client.client.SignedJwtAssertionCredentials(SERVICE_ACCOUNT_EMAIL, key, scope=scope)
+      else:
+        credentials = oauth2client.client.SignedJwtAssertionCredentials(SERVICE_ACCOUNT_EMAIL, key, scope=scope, sub=act_as)
+      credentials.user_agent = u'GAM %s - http://git.io/gam / %s / Python %s.%s.%s %s / %s %s /' % (__version__, __author__,
+                       sys.version_info[0], sys.version_info[1], sys.version_info[2], sys.version_info[3],
+                       platform.platform(), platform.machine())
+      disable_ssl_certificate_validation = False
+      if os.path.isfile(os.path.join(gamUserConfigDir, u'noverifyssl.txt')):
+        disable_ssl_certificate_validation = True
+      self.http = httplib2.Http(disable_ssl_certificate_validation=disable_ssl_certificate_validation, cache=gamCacheDir)
+      if os.path.isfile(os.path.join(gamUserConfigDir, u'debug.gam')):
+        httplib2.debuglevel = 4
+        extra_args[u'prettyPrint'] = True
+      if os.path.isfile(os.path.join(gamUserConfigDir, u'extra-args.txt')):
+        import ConfigParser
+        config = ConfigParser.ConfigParser()
+        config.optionxform = str
+        config.read(os.path.join(gamUserConfigDir, u'extra-args.txt'))
+        extra_args.update(dict(config.items(u'extra-args')))
+      self.http = credentials.authorize(self.http)
+      self.version = getAPIVer(api)
+
+    # Skip all of the above once we have already done all that  
     try:
-      pyinstaller_disc_file = os.path.join(sys._MEIPASS, disc_filename)
-    except (NameError, AttributeError):
-      pass
-    if os.path.isfile(disc_file):
-      f = file(disc_file, 'rb')
-    elif pyinstaller_disc_file:
-      f = file(pyinstaller_disc_file, 'rb')
-    else:
-      print 'No online discovery doc and %s does not exist locally' % disc_file
-      raise
-    discovery = f.read()
-    f.close()
-    return googleapiclient.discovery.build_from_document(discovery, base=u'https://www.googleapis.com', http=http)
+      return googleapiclient.discovery.build(api, self.version, http=self.http)
+    except oauth2client.client.AccessTokenRefreshError, e:
+      if e.message in [u'access_denied', u'unauthorized_client: Unauthorized client or scope in request.']:
+        print u'Error: Access Denied. Please make sure the Client Name:\n\n%s\n\nis authorized for the API Scope(s):\n\n%s\n\nThis can be configured in your Control Panel under:\n\nSecurity -->\nAdvanced Settings -->\nManage third party OAuth Client access' % (SERVICE_ACCOUNT_CLIENT_ID, ','.join(scope))
+        sys.exit(5)
+      else:
+        print u'Error: %s' % e
+        if soft_errors:
+          return False
+        sys.exit(4)
+    except googleapiclient.errors.UnknownApiNameOrVersion:
+      disc_filename = u'%s-%s.json' % (api, version)
+      disc_file = os.path.join(gamSiteConfigDir, disc_filename)
+      pyinstaller_disc_file = None
+      try:
+        pyinstaller_disc_file = os.path.join(sys._MEIPASS, disc_filename)
+      except (NameError, AttributeError):
+        pass
+      if os.path.isfile(disc_file):
+        f = file(disc_file, 'rb')
+      elif pyinstaller_disc_file:
+        f = file(pyinstaller_disc_file, 'rb')
+      else:
+        print 'No online discovery doc and %s does not exist locally' % disc_file
+        raise
+      discovery = f.read()
+      f.close()
+      return googleapiclient.discovery.build_from_document(discovery, base=u'https://www.googleapis.com', http=http)
 
 def buildDiscoveryObject(api):
   import uritemplate
